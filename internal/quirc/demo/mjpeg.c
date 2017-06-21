@@ -15,6 +15,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <setjmp.h>
 #include <jpeglib.h>
@@ -175,10 +176,10 @@ static void setup_table(struct jpeg_decompress_struct *jpeg,
 
 void mjpeg_init(struct mjpeg_decoder *mj)
 {
-	memset(mj, 0, sizeof(mj));
+	memset(mj, 0, sizeof(*mj));
 
 	/* Set up error management */
-	jpeg_std_error(&mj->err);
+	mj->dinfo.err = jpeg_std_error(&mj->err);
 	mj->err.error_exit = my_error_exit;
 	mj->err.output_message = my_output_message;
 
@@ -224,21 +225,25 @@ int mjpeg_decode_rgb32(struct mjpeg_decoder *mj,
 		return -1;
 	}
 
+	uint8_t *rgb = calloc(mj->dinfo.image_width, 3);
+	if (!rgb) {
+		fprintf(stderr, "memory allocation failed\n");
+		return -1;
+	}
 	while (mj->dinfo.output_scanline < mj->dinfo.image_height) {
-		uint8_t rgb[mj->dinfo.image_width * 3];
-		uint8_t *output = rgb;
 		uint8_t *scr = out + pitch * mj->dinfo.output_scanline;
 		int i;
 
-		jpeg_read_scanlines(&mj->dinfo, &output, 1);
+		jpeg_read_scanlines(&mj->dinfo, &rgb, 1);
 		for (i = 0; i < mj->dinfo.image_width; i++) {
-			scr[0] = output[2];
-			scr[1] = output[1];
-			scr[2] = output[0];
+			scr[0] = rgb[2];
+			scr[1] = rgb[1];
+			scr[2] = rgb[0];
 			scr += 4;
-			output += 3;
+			rgb += 3;
 		}
 	}
+	free(rgb);
 
 	jpeg_finish_decompress(&mj->dinfo);
 
